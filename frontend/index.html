@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>bi bot</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Noto+Sans+KR:wght@300;400;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0a0a0f;--surface:#111118;--border:#1e1e2e;--accent:#00d4ff;--green:#00ff88;--red:#ff4444;--yellow:#ffcc00;--purple:#a855f7;--text:#e0e0f0;--muted:#666680;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:"Noto Sans KR",sans-serif;height:100vh;overflow:hidden;display:flex;flex-direction:column;}
+.topbar{height:52px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 16px;gap:10px;flex-shrink:0;}
+.logo{font-family:"JetBrains Mono",monospace;font-size:15px;font-weight:700;color:var(--accent);letter-spacing:3px;white-space:nowrap;}
+.topbar-url{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:6px 12px;color:var(--text);font-family:"JetBrains Mono",monospace;font-size:12px;outline:none;min-width:0;}
+.topbar-url:focus{border-color:var(--accent);}
+.tbtn{padding:7px 14px;border-radius:6px;border:none;cursor:pointer;font-family:"JetBrains Mono",monospace;font-size:11px;font-weight:700;transition:all .2s;white-space:nowrap;}
+.btn-start{background:var(--accent);color:#000;}
+.btn-start:hover{background:#00b8d9;}
+.btn-stop{background:transparent;border:1px solid var(--red);color:var(--red);}
+.btn-stop:hover{background:rgba(255,68,68,.1);}
+.main{flex:1;display:flex;overflow:hidden;}
+.sim-panel{flex:1;border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;min-width:0;}
+.sim-header{padding:10px 16px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--muted);flex-shrink:0;}
+.sim-dot{width:8px;height:8px;border-radius:50%;background:var(--muted);flex-shrink:0;}
+.sim-dot.running{background:var(--green);animation:pulse 1.5s infinite;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.4;}}
+.sim-screen{flex:1;padding:16px;overflow:auto;}
+.browser-mock{background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 4px 40px rgba(0,0,0,.5);min-height:360px;}
+.browser-bar{background:#f0f0f0;padding:8px 12px;display:flex;align-items:center;gap:8px;border-bottom:1px solid #ddd;}
+.bdots{display:flex;gap:5px;}
+.bdots span{width:10px;height:10px;border-radius:50%;}
+.bdots .d1{background:#ff5f57;}.bdots .d2{background:#febc2e;}.bdots .d3{background:#28c840;}
+.burl{flex:1;background:#fff;border:1px solid #ddd;border-radius:4px;padding:3px 10px;font-size:11px;color:#555;font-family:"JetBrains Mono",monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.browser-content{min-height:330px;position:relative;overflow:hidden;background:#fff;}
+.shot-img{width:100%;height:330px;object-fit:cover;object-position:top;display:none;}
+.browser-placeholder{text-align:center;padding-top:70px;color:#999;font-family:"JetBrains Mono",monospace;font-size:13px;}
+.action-log{background:var(--surface);border-top:1px solid var(--border);padding:8px 14px;max-height:145px;overflow-y:auto;font-family:"JetBrains Mono",monospace;font-size:11px;flex-shrink:0;}
+.log-title{color:var(--muted);margin-bottom:5px;font-size:10px;letter-spacing:1px;text-transform:uppercase;}
+.log-entry{display:flex;gap:8px;padding:2px 0;animation:fadeIn .3s ease;}
+@keyframes fadeIn{from{opacity:0;transform:translateY(-3px);}to{opacity:1;}}
+.lt{color:var(--muted);min-width:58px;font-size:10px;}
+.lk-ok{color:var(--green);}.lk-err{color:var(--red);}.lk-warn{color:var(--yellow);}.lk-info{color:var(--accent);}
+.lm{color:var(--text);word-break:break-all;}
+.right-panel{width:370px;flex-shrink:0;display:flex;flex-direction:column;overflow:hidden;}
+.status-panel{flex-shrink:0;border-bottom:1px solid var(--border);padding:14px;background:var(--surface);}
+.status-title{font-family:"JetBrains Mono",monospace;font-size:10px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-bottom:10px;}
+.status-cards{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:10px;}
+.scard{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center;transition:all .2s;}
+.scard-ok.active{border-color:var(--green);background:rgba(0,255,136,.05);}
+.scard-err.active{border-color:var(--red);background:rgba(255,68,68,.05);}
+.scard-warn.active{border-color:var(--yellow);background:rgba(255,204,0,.05);}
+.scard-fb.active{border-color:var(--purple);background:rgba(168,85,247,.05);}
+.sicon{font-size:18px;margin-bottom:3px;}
+.slabel{font-family:"JetBrains Mono",monospace;font-size:10px;font-weight:700;letter-spacing:1px;}
+.scount{font-family:"JetBrains Mono",monospace;font-size:18px;font-weight:700;margin-top:1px;}
+.scard-ok .slabel,.scard-ok .scount{color:var(--green);}
+.scard-err .slabel,.scard-err .scount{color:var(--red);}
+.scard-warn .slabel,.scard-warn .scount{color:var(--yellow);}
+.scard-fb .slabel,.scard-fb .scount{color:var(--purple);}
+.prog-wrap{background:var(--bg);border-radius:4px;height:4px;overflow:hidden;border:1px solid var(--border);}
+.prog-bar{height:100%;background:linear-gradient(90deg,var(--accent),var(--green));width:0%;transition:width .5s;border-radius:4px;}
+.prog-label{font-family:"JetBrains Mono",monospace;font-size:10px;color:var(--muted);margin-top:5px;display:flex;justify-content:space-between;}
+.chat-panel{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+.chat-header{padding:11px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;background:var(--surface);}
+.chat-avatar{width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--purple));display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;}
+.chat-title{font-family:"JetBrains Mono",monospace;font-size:12px;font-weight:700;}
+.chat-sub{font-size:10px;color:var(--muted);}
+.model-badge{margin-left:auto;font-family:"JetBrains Mono",monospace;font-size:9px;color:var(--accent);border:1px solid var(--accent);border-radius:4px;padding:2px 5px;}
+.chat-msgs{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;}
+.msg{display:flex;gap:7px;align-items:flex-start;animation:fadeIn .3s ease;}
+.mavatar{width:22px;height:22px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;}
+.msg.user{flex-direction:row-reverse;}
+.msg.user .mavatar{background:var(--border);}
+.msg.ai .mavatar{background:linear-gradient(135deg,var(--accent),var(--purple));}
+.mbubble{max-width:78%;padding:7px 11px;border-radius:10px;font-size:12px;line-height:1.5;}
+.msg.user .mbubble{background:var(--border);color:var(--text);border-top-right-radius:3px;}
+.msg.ai .mbubble{background:rgba(0,212,255,.07);border:1px solid rgba(0,212,255,.15);color:var(--text);border-top-left-radius:3px;}
+.msg.system .mbubble{background:rgba(255,204,0,.07);border:1px solid rgba(255,204,0,.2);color:var(--yellow);font-family:"JetBrains Mono",monospace;font-size:11px;max-width:100%;width:100%;}
+.typing-dots{display:flex;gap:3px;padding:4px 2px;}
+.typing-dots span{width:5px;height:5px;border-radius:50%;background:var(--accent);animation:bounce 1.2s infinite;}
+.typing-dots span:nth-child(2){animation-delay:.2s;}
+.typing-dots span:nth-child(3){animation-delay:.4s;}
+@keyframes bounce{0%,80%,100%{transform:scale(1);opacity:.5;}40%{transform:scale(1.4);opacity:1;}}
+.chat-input-area{padding:10px 12px;border-top:1px solid var(--border);display:flex;gap:7px;align-items:flex-end;background:var(--surface);}
+.chat-input{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 11px;color:var(--text);font-family:"Noto Sans KR",sans-serif;font-size:12px;resize:none;outline:none;max-height:80px;}
+.chat-input:focus{border-color:var(--accent);}
+.send-btn{width:34px;height:34px;background:var(--accent);border:none;border-radius:8px;cursor:pointer;font-size:13px;transition:all .2s;flex-shrink:0;}
+.send-btn:hover{background:#00b8d9;}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:200;display:flex;align-items:center;justify-content:center;}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:26px;width:440px;max-height:90vh;overflow-y:auto;}
+.modal h2{font-family:"JetBrains Mono",monospace;font-size:15px;color:var(--accent);margin-bottom:18px;letter-spacing:1px;}
+.mfield{margin-bottom:12px;}
+.mlabel{font-size:12px;color:var(--muted);margin-bottom:4px;font-family:"JetBrains Mono",monospace;display:block;}
+.minput{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 11px;color:var(--text);font-family:"JetBrains Mono",monospace;font-size:12px;outline:none;}
+.minput:focus{border-color:var(--accent);}
+.mcheck-row{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px;}
+.mcheck-row input[type=checkbox]{accent-color:var(--accent);width:13px;height:13px;}
+.msec{font-family:"JetBrains Mono",monospace;font-size:10px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin:16px 0 8px;}
+.mbtn-row{display:flex;gap:8px;margin-top:18px;}
+.mbtn{flex:1;padding:9px;border-radius:6px;border:none;cursor:pointer;font-family:"JetBrains Mono",monospace;font-size:12px;font-weight:700;transition:all .2s;}
+.mbtn-primary{background:var(--accent);color:#000;}
+.mbtn-primary:hover{background:#00b8d9;}
+.mbtn-sec{background:transparent;border:1px solid var(--border);color:var(--muted);}
+.err-msg{color:var(--red);font-size:11px;font-family:"JetBrains Mono",monospace;margin-top:6px;}
+::-webkit-scrollbar{width:4px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo">◈ bi bot</div>
+  <input class="topbar-url" id="targetUrl" type="text" placeholder="https://테스트할-사이트.com">
+  <button class="tbtn btn-start" id="btnStart" onclick="openSettings()">⚙ 설정 &amp; 시작</button>
+  <button class="tbtn btn-stop" id="btnStop" onclick="stopTest()" style="display:none">■ 중지</button>
+</div>
+
+<div class="main">
+  <div class="sim-panel">
+    <div class="sim-header">
+      <div class="sim-dot" id="simDot"></div>
+      <span id="simStatus">대기 중 — 설정을 완료하고 테스트를 시작하세요</span>
+      <span style="margin-left:auto;font-size:10px" id="simTimer">00:00</span>
+    </div>
+    <div class="sim-screen">
+      <div class="browser-mock">
+        <div class="browser-bar">
+          <div class="bdots"><span class="d1"></span><span class="d2"></span><span class="d3"></span></div>
+          <div class="burl" id="browserUrl">about:blank</div>
+        </div>
+        <div class="browser-content">
+          <img class="shot-img" id="shotImg" alt="screenshot">
+          <div class="browser-placeholder" id="placeholder">
+            <div style="font-size:40px;margin-bottom:14px">🤖</div>
+            <div>bi bot 준비 완료</div>
+            <div style="font-size:11px;margin-top:8px;color:#bbb">테스트를 시작하면 실제 스크린샷이 표시됩니다</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="action-log">
+      <div class="log-title">▸ 액션 로그</div>
+      <div id="actionLog">
+        <div class="log-entry"><span class="lt">--:--:--</span><span class="lk-info">[INFO]</span><span class="lm">bi bot 초기화 완료</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="right-panel">
+    <div class="status-panel">
+      <div class="status-title">▸ 테스트 결과</div>
+      <div class="status-cards">
+        <div class="scard scard-ok"><div class="sicon">✅</div><div class="slabel">정상</div><div class="scount" id="cnt-ok">0</div></div>
+        <div class="scard scard-err"><div class="sicon">🚨</div><div class="slabel">오류</div><div class="scount" id="cnt-err">0</div></div>
+        <div class="scard scard-warn"><div class="sicon">⚠️</div><div class="slabel">의심</div><div class="scount" id="cnt-warn">0</div></div>
+        <div class="scard scard-fb"><div class="sicon">💬</div><div class="slabel">피드백</div><div class="scount" id="cnt-fb">0</div></div>
+      </div>
+      <div class="prog-wrap"><div class="prog-bar" id="progBar"></div></div>
+      <div class="prog-label"><span id="progLabel">테스트 진행률</span><span id="progPct">0%</span></div>
+    </div>
+    <div class="chat-panel">
+      <div class="chat-header">
+        <div class="chat-avatar">🤖</div>
+        <div><div class="chat-title">bi bot AI</div><div class="chat-sub">실시간 분석 · Groq 기반</div></div>
+        <div class="model-badge">GROQ</div>
+      </div>
+      <div class="chat-msgs" id="chatMsgs">
+        <div class="msg system"><div class="mbubble">⚡ 시스템 준비 완료</div></div>
+        <div class="msg ai">
+          <div class="mavatar">🤖</div>
+          <div class="mbubble">안녕하세요! bi bot입니다. URL을 입력하고 <strong>⚙ 설정 &amp; 시작</strong>을 클릭하세요! 🚀</div>
+        </div>
+      </div>
+      <div class="chat-input-area">
+        <textarea class="chat-input" id="chatInput" rows="1" placeholder="AI에게 질문하거나 지시하세요..." onkeydown="onChatKey(event)"></textarea>
+        <button class="send-btn" onclick="sendChat()">▶</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SETTINGS MODAL -->
+<div class="overlay" id="settingsModal" style="display:none" onclick="if(event.target===this)closeSettings()">
+  <div class="modal">
+    <h2>⚙ bi bot 설정</h2>
+    <div class="msec">API 설정</div>
+    <div class="mfield">
+      <label class="mlabel">🔑 Groq API Key</label>
+      <input class="minput" type="password" id="groqKey" placeholder="gsk_... (groq.com에서 무료 발급)">
+    </div>
+    <div class="msec">로그인 테스트 (선택)</div>
+    <div class="mcheck-row"><input type="checkbox" id="useLogin" onchange="toggle('loginFields',this.checked)"><label for="useLogin">로그인 테스트 포함</label></div>
+    <div id="loginFields" style="display:none;margin-top:8px">
+      <div class="mfield"><label class="mlabel">👤 아이디 / 이메일</label><input class="minput" type="text" id="loginId" placeholder="test@example.com"></div>
+      <div class="mfield"><label class="mlabel">🔒 비밀번호</label><input class="minput" type="password" id="loginPw"></div>
+    </div>
+    <div class="msec">회원가입 테스트 (선택)</div>
+    <div class="mcheck-row"><input type="checkbox" id="useSignup" onchange="toggle('signupFields',this.checked)"><label for="useSignup">회원가입 테스트 포함</label></div>
+    <div id="signupFields" style="display:none;margin-top:8px">
+      <div class="mfield"><label class="mlabel">👤 가입 아이디</label><input class="minput" type="text" id="signupId" placeholder="testuser123"></div>
+      <div class="mfield"><label class="mlabel">📧 가입 이메일</label><input class="minput" type="email" id="signupEmail" placeholder="test@example.com"></div>
+      <div class="mfield"><label class="mlabel">🔒 가입 비밀번호</label><input class="minput" type="password" id="signupPw" placeholder="TestPass123!"></div>
+      <div class="mcheck-row"><input type="checkbox" id="usePhone" onchange="toggle('phoneField',this.checked)"><label>전화번호 포함</label></div>
+      <div id="phoneField" style="display:none;margin-top:6px"><input class="minput" type="text" id="signupPhone" placeholder="010-1234-5678"></div>
+      <div class="mcheck-row" style="margin-top:6px"><input type="checkbox" id="useRRN" onchange="toggle('rrnField',this.checked)"><label>주민번호 포함 (선택)</label></div>
+      <div id="rrnField" style="display:none;margin-top:6px"><input class="minput" type="text" id="signupRRN" placeholder="000101-1234567"></div>
+    </div>
+    <div class="msec">테스트 시나리오</div>
+    <div class="mcheck-row"><input type="checkbox" id="testButtons" checked><label>버튼 클릭 테스트</label></div>
+    <div class="mcheck-row"><input type="checkbox" id="testForms" checked><label>폼 유효성 테스트</label></div>
+    <div class="mcheck-row"><input type="checkbox" id="testNav" checked><label>네비게이션 링크 테스트</label></div>
+    <div class="mcheck-row"><input type="checkbox" id="testConsole" checked><label>콘솔 오류 감지</label></div>
+    <div id="settingsErr" class="err-msg"></div>
+    <div class="mbtn-row">
+      <button class="mbtn mbtn-sec" onclick="closeSettings()">취소</button>
+      <button class="mbtn mbtn-primary" onclick="startTest()">🚀 테스트 시작</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ★ Railway 배포 후 이 주소를 바꾸세요
+const SERVER = window.location.hostname === 'localhost'
+  ? 'http://localhost:3000'
+  : 'https://YOUR-RAILWAY-APP.railway.app';
+const WS_SERVER = SERVER.replace('http','ws').replace('https','wss');
+
+const state = {
+  sessionId: null, ws: null, running: false,
+  messages: [], counts: {ok:0,err:0,warn:0,fb:0},
+  timerInterval: null, timerSec: 0,
+  groqKey: localStorage.getItem('bibot_groq') || '',
+};
+
+window.addEventListener('load', () => {
+  document.getElementById('groqKey').value = state.groqKey;
+  checkServer();
+});
+
+async function checkServer() {
+  try {
+    const r = await fetch(SERVER + '/api/health');
+    if (r.ok) addLog('ok','서버 연결 성공');
+    else addLog('warn','서버 응답 이상');
+  } catch { addLog('err','서버에 연결할 수 없습니다. Railway 주소를 확인하세요.'); }
+}
+
+function openSettings() { document.getElementById('settingsModal').style.display='flex'; }
+function closeSettings() { document.getElementById('settingsModal').style.display='none'; }
+function toggle(id, show) { document.getElementById(id).style.display = show ? 'block' : 'none'; }
+
+async function startTest() {
+  const url = document.getElementById('targetUrl').value.trim();
+  const groqKey = document.getElementById('groqKey').value.trim();
+  document.getElementById('settingsErr').textContent = '';
+  if (!url) { document.getElementById('settingsErr').textContent = 'URL을 입력해주세요.'; return; }
+  if (groqKey) { state.groqKey = groqKey; localStorage.setItem('bibot_groq', groqKey); }
+
+  const config = {
+    targetUrl: url,
+    useLogin: document.getElementById('useLogin').checked,
+    loginId: document.getElementById('loginId').value,
+    loginPw: document.getElementById('loginPw').value,
+    useSignup: document.getElementById('useSignup').checked,
+    signupId: document.getElementById('signupId').value,
+    signupEmail: document.getElementById('signupEmail').value,
+    signupPw: document.getElementById('signupPw').value,
+    usePhone: document.getElementById('usePhone').checked,
+    signupPhone: document.getElementById('signupPhone').value,
+    useRRN: document.getElementById('useRRN').checked,
+    signupRRN: document.getElementById('signupRRN').value,
+    testButtons: document.getElementById('testButtons').checked,
+    testForms: document.getElementById('testForms').checked,
+    testNav: document.getElementById('testNav').checked,
+    testConsole: document.getElementById('testConsole').checked,
+    groqApiKey: groqKey,
+  };
+
+  try {
+    const r = await fetch(SERVER + '/api/test/start', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(config) });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error);
+    state.sessionId = data.sessionId;
+    closeSettings();
+    connectWS(data.sessionId);
+  } catch(e) { document.getElementById('settingsErr').textContent = e.message; }
+}
+
+function connectWS(sessionId) {
+  state.running = true;
+  state.messages = [];
+  state.counts = {ok:0,err:0,warn:0,fb:0};
+  updateCounts();
+  document.getElementById('actionLog').innerHTML = '';
+  document.getElementById('shotImg').style.display = 'none';
+  document.getElementById('placeholder').style.display = 'block';
+  document.getElementById('progBar').style.width = '0%';
+  document.getElementById('progPct').textContent = '0%';
+  document.getElementById('btnStart').style.display = 'none';
+  document.getElementById('btnStop').style.display = 'inline-block';
+  document.getElementById('simDot').className = 'sim-dot running';
+  document.getElementById('browserUrl').textContent = document.getElementById('targetUrl').value;
+  startTimer();
+
+  const ws = new WebSocket(WS_SERVER);
+  state.ws = ws;
+
+  ws.onopen = () => ws.send(JSON.stringify({ type: 'join', sessionId }));
+  ws.onmessage = (e) => handleMsg(JSON.parse(e.data));
+  ws.onclose = () => { if (state.running) finishTest(); };
+  ws.onerror = () => { addLog('err','WebSocket 오류'); finishTest(); };
+}
+
+function handleMsg(msg) {
+  switch(msg.type) {
+    case 'connected': addLog('info','테스트 봇 시작! → ' + msg.targetUrl); addAI('🔍 실제 브라우저로 탐색 시작...'); break;
+    case 'log': addLog(msg.logType||'info', msg.message); break;
+    case 'status': document.getElementById('simStatus').textContent = msg.text; break;
+    case 'ok': case 'err': case 'warn': case 'fb':
+      state.counts[msg.type]++; updateCounts(); addLog(msg.type, msg.message); break;
+    case 'screenshot': showShot(msg.data); break;
+    case 'progress': updateProgress(msg.current, msg.total); break;
+    case 'ai_message': addAI(msg.message); break;
+    case 'done': if(msg.counts){state.counts=msg.counts;updateCounts();} if(msg.screenshot)showShot(msg.screenshot); finishTest(); break;
+    case 'stopped': finishTest(); break;
+    case 'error': addLog('err','오류: '+msg.message); finishTest(); break;
+  }
+}
+
+function stopTest() {
+  if (state.ws && state.ws.readyState === WebSocket.OPEN) state.ws.send(JSON.stringify({type:'stop'}));
+  finishTest();
+}
+
+function finishTest() {
+  state.running = false;
+  clearInterval(state.timerInterval);
+  document.getElementById('simDot').className = 'sim-dot';
+  document.getElementById('simStatus').textContent = '테스트 완료';
+  document.getElementById('btnStart').style.display = 'inline-block';
+  document.getElementById('btnStop').style.display = 'none';
+}
+
+function addAI(text) { addChatMsg('ai', text); }
+
+function addChatMsg(role, text) {
+  const c = document.getElementById('chatMsgs');
+  const div = document.createElement('div');
+  div.className = 'msg ' + role;
+  const av = document.createElement('div'); av.className='mavatar'; av.textContent = role==='user'?'👤':'🤖';
+  const b = document.createElement('div'); b.className='mbubble';
+  if (role==='user') { b.textContent = text; }
+  else { b.innerHTML = esc(text).replace(/\n/g,'<br>').replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>'); }
+  div.appendChild(av); div.appendChild(b);
+  c.appendChild(div); c.scrollTop = c.scrollHeight;
+}
+
+function showTyping() {
+  const c = document.getElementById('chatMsgs');
+  const d = document.createElement('div'); d.className='msg ai'; d.id='typing';
+  d.innerHTML='<div class="mavatar">🤖</div><div class="mbubble"><div class="typing-dots"><span></span><span></span><span></span></div></div>';
+  c.appendChild(d); c.scrollTop=c.scrollHeight;
+}
+function removeTyping() { const e=document.getElementById('typing'); if(e) e.remove(); }
+
+async function sendChat() {
+  const inp = document.getElementById('chatInput');
+  const text = inp.value.trim();
+  if (!text) return;
+  inp.value = '';
+  addChatMsg('user', text);
+  state.messages.push({role:'user', content:text});
+  showTyping();
+  try {
+    const r = await fetch(SERVER+'/api/chat', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ messages: state.messages, userGroqKey: state.groqKey })
+    });
+    const data = await r.json();
+    removeTyping();
+    if (!r.ok) throw new Error(data.error);
+    addAI(data.reply);
+    state.messages.push({role:'assistant', content:data.reply});
+    if (state.messages.length > 20) state.messages = state.messages.slice(-20);
+  } catch(e) { removeTyping(); addAI('❌ 오류: ' + e.message); }
+}
+
+function onChatKey(e) { if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendChat();} }
+
+function addLog(type, msg) {
+  const now = new Date().toTimeString().slice(0,8);
+  const log = document.getElementById('actionLog');
+  const typeMap={ok:'lk-ok',err:'lk-err',warn:'lk-warn',info:'lk-info'};
+  const labelMap={ok:'[OK]',err:'[ERR]',warn:'[WARN]',info:'[INFO]'};
+  const e = document.createElement('div'); e.className='log-entry';
+  const lt=document.createElement('span'); lt.className='lt'; lt.textContent=now;
+  const lk=document.createElement('span'); lk.className=typeMap[type]||'lk-info'; lk.textContent=labelMap[type]||'[INFO]';
+  const lm=document.createElement('span'); lm.className='lm'; lm.textContent=msg;
+  e.appendChild(lt); e.appendChild(lk); e.appendChild(lm);
+  log.appendChild(e); log.scrollTop=log.scrollHeight;
+}
+
+function updateCounts() {
+  ['ok','err','warn','fb'].forEach(k => {
+    document.getElementById('cnt-'+k).textContent = state.counts[k];
+    const card = document.querySelector('.scard-'+k);
+    if (state.counts[k]>0) card.classList.add('active'); else card.classList.remove('active');
+  });
+}
+
+function updateProgress(cur, tot) {
+  const pct = tot>0 ? Math.round((cur/tot)*100) : 0;
+  document.getElementById('progBar').style.width = pct+'%';
+  document.getElementById('progPct').textContent = pct+'%';
+  document.getElementById('progLabel').textContent = '단계 '+cur+' / '+tot;
+}
+
+function showShot(base64) {
+  const img=document.getElementById('shotImg');
+  img.src='data:image/jpeg;base64,'+base64;
+  img.style.display='block';
+  document.getElementById('placeholder').style.display='none';
+}
+
+function startTimer() {
+  state.timerSec=0;
+  clearInterval(state.timerInterval);
+  state.timerInterval=setInterval(()=>{
+    state.timerSec++;
+    const m=String(Math.floor(state.timerSec/60)).padStart(2,'0');
+    const s=String(state.timerSec%60).padStart(2,'0');
+    document.getElementById('simTimer').textContent=m+':'+s;
+  },1000);
+}
+
+function esc(str) {
+  const d=document.createElement('div');
+  d.appendChild(document.createTextNode(String(str)));
+  return d.innerHTML;
+}
+</script>
+</body>
+</html>
