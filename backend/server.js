@@ -16,7 +16,7 @@ const SERVER_GROQ_KEY = process.env.GROQ_API_KEY || '';
 
 app.use(cors({ origin: '*' }));
 app.use(express.json({ limit: '10mb' }));
-app.use(express.static(path.join(__dirname, '../frontend')));
+app.use(express.static(path.join(__dirname, './frontend')));
 
 const activeBots = new Map();
 const sessions = new Map();
