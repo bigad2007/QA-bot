@@ -4,20 +4,19 @@ class BotRunner {
   constructor(sessionId, config, onEvent) {
     this.sessionId = sessionId;
     this.config = config;
-    this.onEvent = onEvent; // WebSocket으로 이벤트 전달하는 콜백
+    this.onEvent = onEvent;
     this.browser = null;
     this.page = null;
     this.stopped = false;
     this.counts = { ok: 0, err: 0, warn: 0, fb: 0 };
   }
 
-  // 이벤트 emit (WebSocket + DB 저장)
-  emit(type, message, screenshot = null) {
+  emit(type, message) {
     if (this.stopped) return;
     if (['ok','err','warn','fb'].includes(type)) {
       this.counts[type] = (this.counts[type] || 0) + 1;
     }
-    this.onEvent({ type, message, screenshot, counts: { ...this.counts } });
+    this.onEvent({ type, message, counts: { ...this.counts } });
   }
 
   emitLog(type, message) {
@@ -44,16 +43,15 @@ class BotRunner {
     return new Promise(r => setTimeout(r, ms));
   }
 
-  // 실시간 스크린샷 루프 시작 (500ms마다)
+  // 실시간 스크린샷 루프 (200ms마다 — 더 부드럽게)
   startScreenshotLoop() {
     this.screenshotLoop = setInterval(async () => {
       if (this.stopped || !this.page) return;
       try {
         const buf = await this.page.screenshot({ type: 'jpeg', quality: 40, fullPage: false });
-        const data = buf.toString('base64');
-        this.onEvent({ type: 'screenshot', data });
+        this.onEvent({ type: 'screenshot', data: buf.toString('base64') });
       } catch {}
-    }, 500);
+    }, 200);
   }
 
   stopScreenshotLoop() {
@@ -63,22 +61,10 @@ class BotRunner {
     }
   }
 
-  // 스크린샷 base64로 캡처
-  async screenshot() {
-    try {
-      if (!this.page) return null;
-      const buf = await this.page.screenshot({ type: 'jpeg', quality: 60, fullPage: false });
-      return buf.toString('base64');
-    } catch {
-      return null;
-    }
-  }
-
   async run() {
     const cfg = this.config;
 
     try {
-      // 브라우저 시작
       this.emitLog('info', '브라우저 시작 중...');
       this.browser = await chromium.launch({
         headless: true,
@@ -91,10 +77,12 @@ class BotRunner {
         ignoreHTTPSErrors: true,
       });
 
-      // 콘솔 오류 캡처
       const consoleErrors = [];
       this.page = await context.newPage();
+
+      // 루프 시작 — 여기서부터 스크린샷 자동 전송
       this.startScreenshotLoop();
+
       this.page.on('console', msg => {
         if (msg.type() === 'error') consoleErrors.push(msg.text());
       });
@@ -112,11 +100,10 @@ class BotRunner {
       }
 
       if (!this.stopped) {
-        const shot = await this.screenshot();
         this.emitStatus('테스트 완료 ✓');
         this.emitProgress(total, total);
         this.emitAI(`📊 테스트 완료!\n- ✅ 정상: ${this.counts.ok}개\n- 🚨 오류: ${this.counts.err}개\n- ⚠️ 의심: ${this.counts.warn}개\n- 💬 피드백: ${this.counts.fb}개\n\n${this.counts.err > 0 ? '오류가 발견되었습니다. 로그를 확인해주세요!' : '모든 테스트가 정상 완료되었습니다! 🎉'}`);
-        this.onEvent({ type: 'done', counts: { ...this.counts }, screenshot: shot });
+        this.onEvent({ type: 'done', counts: { ...this.counts } });
       }
 
     } catch (err) {
@@ -138,19 +125,17 @@ class BotRunner {
       try {
         const res = await this.page.goto(cfg.targetUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
         const status = res?.status() || 0;
-        const shot = await this.screenshot();
         if (status >= 200 && status < 400) {
           this.emitLog('ok', `페이지 로드 성공 (HTTP ${status})`);
-          this.emit('ok', `페이지 로드 성공 (HTTP ${status})`, shot);
+          this.emit('ok', `페이지 로드 성공 (HTTP ${status})`);
         } else {
           this.emitLog('err', `페이지 로드 실패 (HTTP ${status})`);
-          this.emit('err', `페이지 로드 실패 (HTTP ${status})`, shot);
+          this.emit('err', `페이지 로드 실패 (HTTP ${status})`);
           this.emitAI(`🚨 페이지가 HTTP ${status} 오류를 반환했습니다. 서버 상태를 확인해주세요.`);
         }
       } catch (e) {
-        const shot = await this.screenshot();
         this.emitLog('err', `페이지 접근 불가: ${e.message}`);
-        this.emit('err', `접근 불가: ${e.message}`, shot);
+        this.emit('err', `접근 불가: ${e.message}`);
         this.emitAI(`🚨 사이트에 접근할 수 없습니다: ${e.message}`);
       }
     }});
@@ -177,8 +162,6 @@ class BotRunner {
           }
         } catch {}
       }
-      const shot = await this.screenshot();
-      if (shot) this.onEvent({ type: 'screenshot', data: shot });
     }});
 
     // ── 3. 로그인 테스트 ──
@@ -186,7 +169,6 @@ class BotRunner {
       steps.push({ name: '로그인 시도', fn: async () => {
         this.emitLog('info', '로그인 폼 탐색 중...');
         try {
-          // 로그인 페이지 이동 시도
           const loginSelectors = [
             'a[href*="login"]', 'a[href*="signin"]', 'a[href*="로그인"]',
             'button:has-text("로그인")', 'button:has-text("Login")',
@@ -199,15 +181,11 @@ class BotRunner {
             } catch {}
           }
           if (!navigated) {
-            // 직접 /login 시도
             try { await this.page.goto(cfg.targetUrl + '/login', { timeout: 8000 }); } catch {}
           }
 
           await this.sleep(1000);
-          const shot1 = await this.screenshot();
-          if (shot1) this.onEvent({ type: 'screenshot', data: shot1 });
 
-          // 아이디 입력
           const idSelectors = ['input[type="email"]','input[name="email"]','input[name="username"]','input[name="id"]','input[placeholder*="아이디"]','input[placeholder*="이메일"]'];
           const pwSelectors = ['input[type="password"]'];
 
@@ -223,7 +201,6 @@ class BotRunner {
             this.emitLog('info', '아이디/비밀번호 입력 완료');
             await this.sleep(500);
 
-            // 로그인 버튼 클릭
             const submitSelectors = ['button[type="submit"]','input[type="submit"]','button:has-text("로그인")','button:has-text("Login")','button:has-text("Sign in")'];
             for (const sel of submitSelectors) {
               try {
@@ -234,22 +211,16 @@ class BotRunner {
             }
 
             await this.sleep(1500);
-            const shot2 = await this.screenshot();
-
-            // 로그인 성공 여부 판단
             const url = this.page.url();
             const hasError = await this.page.$('.error, .alert-danger, [role="alert"]').catch(() => null);
 
             if (hasError || url.includes('login') || url.includes('signin')) {
               this.emitLog('warn', '로그인 실패 또는 오류 메시지 감지');
-              this.emit('warn', '로그인 실패 감지', shot2);
+              this.emit('warn', '로그인 실패 감지');
               this.emitAI('⚠️ 로그인이 실패했습니다. 자격증명을 확인하거나 회원가입이 필요할 수 있습니다.');
-              if (cfg.useSignup) {
-                this.emitLog('info', '→ 회원가입 플로우로 전환');
-              }
             } else {
               this.emitLog('ok', `로그인 성공! 현재 URL: ${url}`);
-              this.emit('ok', '로그인 성공', shot2);
+              this.emit('ok', '로그인 성공');
               this.emitAI('✅ 로그인 성공! 대시보드 또는 메인 페이지로 이동됐습니다.');
             }
           } else {
@@ -279,10 +250,7 @@ class BotRunner {
           }
 
           await this.sleep(1000);
-          const shot = await this.screenshot();
-          if (shot) this.onEvent({ type: 'screenshot', data: shot });
 
-          // 각 필드 채우기
           const fieldMap = [
             { selectors: ['input[name="username"]','input[name="id"]','input[placeholder*="아이디"]'], value: cfg.signupId || 'bibot_test_user' },
             { selectors: ['input[type="email"]','input[name="email"]'], value: cfg.signupEmail || 'bibot@test.com' },
@@ -300,11 +268,8 @@ class BotRunner {
           }
 
           this.emitLog('info', `회원가입 폼 ${filled}개 필드 입력 완료`);
-          const shot2 = await this.screenshot();
-          this.emit('ok', `회원가입 폼 입력 완료 (${filled}개 필드)`, shot2);
+          this.emit('ok', `회원가입 폼 입력 완료 (${filled}개 필드)`);
           this.emitAI(`✅ 회원가입 폼 입력 완료. ${filled}개 필드가 채워졌습니다.`);
-
-          // 제출은 실제로 하지 않음 (실제 DB에 저장될 수 있어서 warn 처리)
           this.emitLog('warn', '회원가입 실제 제출은 생략 (실제 DB 영향 방지)');
           this.emit('warn', '회원가입 제출 생략 (안전 모드)');
         } catch (e) {
@@ -334,7 +299,6 @@ class BotRunner {
               const isVisible = await btn.isVisible();
               if (!isVisible) continue;
 
-              // 호버 테스트
               await btn.hover({ timeout: 2000 });
               await this.sleep(300);
 
@@ -346,9 +310,6 @@ class BotRunner {
             }
             await this.sleep(200);
           }
-
-          const shot = await this.screenshot();
-          if (shot) this.onEvent({ type: 'screenshot', data: shot });
         } catch (e) {
           this.emitLog('err', `버튼 테스트 오류: ${e.message}`);
         }
@@ -367,7 +328,6 @@ class BotRunner {
             if (this.stopped) break;
             const inputs = await forms[i].$$('input:not([type="hidden"]):not([type="submit"])');
             this.emitLog('info', `폼 ${i+1}: 입력 필드 ${inputs.length}개`);
-
             if (inputs.length > 0) {
               this.emit('ok', `폼 ${i+1} 구조 정상 (${inputs.length}개 필드)`);
             } else {
@@ -407,14 +367,13 @@ class BotRunner {
               const res = await this.page.goto(link, { timeout: 8000 });
               const status = res?.status() || 0;
               await this.sleep(600);
-              const shot = await this.screenshot();
 
               if (status >= 200 && status < 400) {
                 this.emitLog('ok', `${link} → ${status}`);
-                this.emit('ok', `링크 정상: ${link.replace(origin,'')}`, shot);
+                this.emit('ok', `링크 정상: ${link.replace(origin,'')}`);
               } else if (status === 404) {
                 this.emitLog('err', `${link} → 404 Not Found`);
-                this.emit('err', `404 오류: ${link.replace(origin,'')}`, shot);
+                this.emit('err', `404 오류: ${link.replace(origin,'')}`);
                 this.emitAI(`🚨 링크 404 발견: \`${link.replace(origin,'')}\` — 라우팅 확인 필요!`);
                 this.emit('fb', `피드백: ${link.replace(origin,'')} 404`);
               } else {
@@ -437,7 +396,7 @@ class BotRunner {
       steps.push({ name: '콘솔 오류 분석', fn: async () => {
         this.emitLog('info', '콘솔 오류 분석 중...');
         await this.page.goto(cfg.targetUrl, { timeout: 10000 });
-        await this.sleep(2000); // 오류 발생 대기
+        await this.sleep(2000);
 
         if (consoleErrors.length === 0) {
           this.emitLog('ok', '콘솔 오류 없음 ✓');
@@ -460,14 +419,6 @@ class BotRunner {
         const start = Date.now();
         await this.page.goto(cfg.targetUrl, { waitUntil: 'load', timeout: 15000 });
         const loadTime = Date.now() - start;
-
-        const metrics = await this.page.evaluate(() => {
-          const perf = performance.getEntriesByType('navigation')[0];
-          return {
-            domContentLoaded: Math.round(perf?.domContentLoadedEventEnd || 0),
-            loadComplete: Math.round(perf?.loadEventEnd || 0),
-          };
-        });
 
         if (loadTime < 2000) {
           this.emitLog('ok', `로드 시간: ${loadTime}ms (빠름)`);
