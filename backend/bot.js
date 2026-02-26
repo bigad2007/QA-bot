@@ -44,6 +44,25 @@ class BotRunner {
     return new Promise(r => setTimeout(r, ms));
   }
 
+  // 실시간 스크린샷 루프 시작 (500ms마다)
+  startScreenshotLoop() {
+    this.screenshotLoop = setInterval(async () => {
+      if (this.stopped || !this.page) return;
+      try {
+        const buf = await this.page.screenshot({ type: 'jpeg', quality: 40, fullPage: false });
+        const data = buf.toString('base64');
+        this.onEvent({ type: 'screenshot', data });
+      } catch {}
+    }, 500);
+  }
+
+  stopScreenshotLoop() {
+    if (this.screenshotLoop) {
+      clearInterval(this.screenshotLoop);
+      this.screenshotLoop = null;
+    }
+  }
+
   // 스크린샷 base64로 캡처
   async screenshot() {
     try {
@@ -75,6 +94,7 @@ class BotRunner {
       // 콘솔 오류 캡처
       const consoleErrors = [];
       this.page = await context.newPage();
+      this.startScreenshotLoop();
       this.page.on('console', msg => {
         if (msg.type() === 'error') consoleErrors.push(msg.text());
       });
@@ -103,6 +123,7 @@ class BotRunner {
       this.emitLog('err', `치명적 오류: ${err.message}`);
       this.onEvent({ type: 'error', message: err.message });
     } finally {
+      this.stopScreenshotLoop();
       if (this.browser) await this.browser.close().catch(() => {});
     }
   }
